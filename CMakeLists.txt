@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(silicon_snooper C)
+project(silicon_snooper C OBJC)
 
 set(CMAKE_C_STANDARD 11)
 
 # Includes (Header-Verzeichnis)
-include_directories(include)
+include_directories(include gui)
 
 add_executable(silicon_snooper
         src/main.c
@@ -21,5 +21,22 @@ add_executable(silicon_snooper
 target_link_libraries(silicon_snooper
         "-framework CoreFoundation"
         "-framework IOKit"
+)
+
+set(GUI_SOURCES
+        gui/gui_main.m
+        gui/gui_view.m
+        gui/gui_bridge.c
+        gui/gui_ringbuffer.c
+        src/telemetry_cpu.c
+        src/util.c
+)
+
+add_executable(silicon_snooper_gui ${GUI_SOURCES})
+
+set_source_files_properties(gui/gui_main.m gui/gui_view.m PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+
+target_link_libraries(silicon_snooper_gui
+        "-framework Cocoa"
 )
 
