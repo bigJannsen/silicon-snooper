@@ -48,17 +48,25 @@
 
     CpuUsage overall = {0};
     int rc = gui_cpu_probe_sample(_probe, &overall);
-    if (rc == 0) {
-        double used_percent = (overall.user + overall.system) * 100.0;
-        if (used_percent < 0.0) {
-            used_percent = 0.0;
-        }
-        if (used_percent > 100.0) {
-            used_percent = 100.0;
-        }
-        gui_ring_buffer_push(_buffer, used_percent);
-        [self setNeedsDisplay:YES];
+    if (rc != 0) {
+        // First sample returns 1 (no delta yet) or an error occurred.
+        return;
     }
+
+    double used_percent = 100.0 - overall.idle;
+    if (overall.user == 0.0 && overall.system == 0.0 && overall.idle == 0.0) {
+        used_percent = 0.0;
+    }
+
+    if (used_percent < 0.0) {
+        used_percent = 0.0;
+    }
+    if (used_percent > 100.0) {
+        used_percent = 100.0;
+    }
+
+    gui_ring_buffer_push(_buffer, used_percent);
+    [self setNeedsDisplay:YES];
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
