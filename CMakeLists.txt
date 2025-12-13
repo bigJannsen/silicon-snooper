@@ -12,6 +12,8 @@ add_executable(silicon_snooper
         src/cpu.c
         src/util.c
         src/deviceinfo.c
+        src/telemetry_cpu.c
+        src/telemetry_gpu.c
 )
 
 
