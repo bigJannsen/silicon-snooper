@@ -70,10 +70,10 @@ int cpu_sample_collect(CpuSample *sample) {
 
     for (natural_t i = 0; i < cpu_count; ++i) {
         processor_cpu_load_info_t cpu_load = (processor_cpu_load_info_t)(cpu_info + (i * CPU_STATE_MAX));
-        sample->cores[i].user = (uint64_t)cpu_load[CPU_STATE_USER];
-        sample->cores[i].system = (uint64_t)cpu_load[CPU_STATE_SYSTEM];
-        sample->cores[i].idle = (uint64_t)cpu_load[CPU_STATE_IDLE];
-        sample->cores[i].nice = (uint64_t)cpu_load[CPU_STATE_NICE];
+        sample->cores[i].user = (uint64_t)cpu_load->cpu_ticks[CPU_STATE_USER];
+        sample->cores[i].system = (uint64_t)cpu_load->cpu_ticks[CPU_STATE_SYSTEM];
+        sample->cores[i].idle = (uint64_t)cpu_load->cpu_ticks[CPU_STATE_IDLE];
+        sample->cores[i].nice = (uint64_t)cpu_load->cpu_ticks[CPU_STATE_NICE];
     }
 
     sample->core_count = cpu_count;
