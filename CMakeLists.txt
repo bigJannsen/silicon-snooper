@@ -26,9 +26,12 @@ target_link_libraries(silicon_snooper
 set(GUI_SOURCES
         gui/gui_main.m
         gui/gui_view.m
-        gui/gui_bridge.c
         gui/gui_ringbuffer.c
+        gui/gui_telemetry_bridge.c
         src/telemetry_cpu.c
+        src/telemetry_gpu.c
+        src/cpu.c
+        src/deviceinfo.c
         src/util.c
 )
 
@@ -38,5 +41,7 @@ set_source_files_properties(gui/gui_main.m gui/gui_view.m PROPERTIES COMPILE_FLA
 
 target_link_libraries(silicon_snooper_gui
         "-framework Cocoa"
+        "-framework CoreFoundation"
+        "-framework IOKit"
 )
 
