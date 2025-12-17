@@ -1,4 +1,5 @@
 #import "gui_view.h"
+#import "gui_bridge.h"
 
 @interface GuiGraphView ()
 @property (nonatomic, assign) GuiRingBuffer *buffer;
@@ -115,12 +116,12 @@
 @interface GuiDashboardView ()
 @property (nonatomic, assign) GuiRingBuffer *cpuBuffer;
 @property (nonatomic, assign) GuiRingBuffer *gpuBuffer;
-@property (nonatomic, assign) GuiCpuProbe *cpuProbe;
+@property (nonatomic, assign) GuiTelemetry *telemetry;
 @property (nonatomic, strong) GuiGraphView *cpuView;
 @property (nonatomic, strong) GuiGraphView *gpuView;
 @property (nonatomic, strong) NSTimer *timer;
 @property (nonatomic, assign) NSUInteger intervalMillis;
-@property (nonatomic, assign) GuiSystemInfo systemInfo;
+@property (nonatomic, assign) SnooperSystemInfo systemInfo;
 @property (nonatomic, assign) BOOL showIdentifiers;
 @end
 
@@ -129,15 +130,15 @@
 - (instancetype)initWithFrame:(NSRect)frame
                        cpuBuf:(GuiRingBuffer *)cpuBuf
                        gpuBuf:(GuiRingBuffer *)gpuBuf
-                         cpu:(GuiCpuProbe *)cpuProbe
+                    telemetry:(GuiTelemetry *)telemetry
               intervalMillis:(NSUInteger)interval
-                 systemInfo:(GuiSystemInfo)systemInfo
+                 systemInfo:(SnooperSystemInfo)systemInfo
             showIdentifiers:(BOOL)showIdentifiers {
     self = [super initWithFrame:frame];
     if (self) {
         _cpuBuffer = cpuBuf;
         _gpuBuffer = gpuBuf;
-        _cpuProbe = cpuProbe;
+        _telemetry = telemetry;
         _intervalMillis = interval;
         _systemInfo = systemInfo;
         _showIdentifiers = showIdentifiers;
@@ -189,37 +190,27 @@
 }
 
 - (void)pollTelemetry {
-    if (_cpuBuffer && _cpuProbe) {
-        CpuUsage overall = {0};
-        int rc = gui_cpu_probe_sample(_cpuProbe, &overall);
+    if (_telemetry) {
+        SnooperSnapshot snapshot = {0};
+        int rc = gui_poll_snapshot(_telemetry, &snapshot);
         if (rc == 0) {
-            double used_percent = 100.0 - overall.idle;
-            if (used_percent < 0.0) used_percent = 0.0;
-            if (used_percent > 100.0) used_percent = 100.0;
-            gui_ring_buffer_push(_cpuBuffer, used_percent);
-            self.cpuView.latestValue = used_percent;
+            double cpu_used = snapshot.cpu_used_percent;
+            if (cpu_used < 0.0) cpu_used = 0.0;
+            if (cpu_used > 100.0) cpu_used = 100.0;
+            gui_ring_buffer_push(_cpuBuffer, cpu_used);
+            self.cpuView.latestValue = cpu_used;
             self.cpuView.metricAvailable = YES;
-        } else if (rc == 1) {
-            // first sample, ignore
-        }
-    }
 
-    if (_gpuBuffer) {
-        GuiGpuSample sample = {0};
-        if (gui_gpu_probe_sample(&sample) == 0) {
-            if (sample.available) {
-                double val = sample.utilization_percent;
-                if (val < 0.0) val = 0.0;
-                if (val > 100.0) val = 100.0;
-                gui_ring_buffer_push(_gpuBuffer, val);
-                self.gpuView.latestValue = val;
+            if (snapshot.gpu_available) {
+                double gpu_val = snapshot.gpu_used_percent;
+                if (gpu_val < 0.0) gpu_val = 0.0;
+                if (gpu_val > 100.0) gpu_val = 100.0;
+                gui_ring_buffer_push(_gpuBuffer, gpu_val);
+                self.gpuView.latestValue = gpu_val;
                 self.gpuView.metricAvailable = YES;
             } else {
-                // keep history flat but mark unavailable
                 self.gpuView.metricAvailable = NO;
             }
-        } else {
-            self.gpuView.metricAvailable = NO;
         }
     }
 
