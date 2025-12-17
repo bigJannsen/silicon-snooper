@@ -1,51 +1,29 @@
 #include "gui_bridge.h"
-#include <string.h>
 
-int gui_cpu_probe_init(GuiCpuProbe *probe) {
-    if (!probe) {
-        return -1;
-    }
-    memset(probe, 0, sizeof(*probe));
-    return 0;
+int gui_telemetry_init(GuiTelemetry *telemetry, int show_identifiers) {
+    if (!telemetry) return -1;
+    SnooperStatus status = snooper_telemetry_init(&telemetry->telemetry, show_identifiers);
+    return status == SNOOPER_OK ? 0 : -1;
 }
 
-int gui_cpu_probe_sample(GuiCpuProbe *probe, CpuUsage *overall_usage) {
-    if (!probe || !overall_usage) {
-        return -1;
-    }
-
-    CpuSample current = {0};
-    if (cpu_sample_collect(&current) != 0) {
-        return -1;
-    }
-
-    if (!probe->has_previous) {
-        probe->previous = current;
-        probe->has_previous = 1;
-        return 1; // indicates first sample, no delta yet
-    }
-
-    CpuUsageReport report = {0};
-    int rc = cpu_usage_from_delta(&probe->previous, &current, &report);
-    cpu_sample_destroy(&probe->previous);
-    probe->previous = current;
-
-    if (rc != 0) {
-        return -1;
-    }
-
-    *overall_usage = report.overall;
-    cpu_usage_report_destroy(&report);
-    return 0;
+void gui_telemetry_destroy(GuiTelemetry *telemetry) {
+    if (!telemetry) return;
+    snooper_telemetry_destroy(&telemetry->telemetry);
 }
 
-void gui_cpu_probe_destroy(GuiCpuProbe *probe) {
-    if (!probe) {
-        return;
+int gui_poll_snapshot(GuiTelemetry *telemetry, SnooperSnapshot *snapshot) {
+    if (!telemetry || !snapshot) return -1;
+    SnooperStatus status = snooper_snapshot_collect(&telemetry->telemetry, snapshot);
+    if (status == SNOOPER_ERR_WARMUP) {
+        return 1;
     }
+    return status == SNOOPER_OK ? 0 : -1;
+}
 
-    if (probe->has_previous) {
-        cpu_sample_destroy(&probe->previous);
-        probe->has_previous = 0;
+const SnooperSystemInfo *gui_system_info(const GuiTelemetry *telemetry) {
+    if (!telemetry) return NULL;
+    if (telemetry->telemetry.system_info_loaded) {
+        return &telemetry->telemetry.system_info;
     }
+    return NULL;
 }

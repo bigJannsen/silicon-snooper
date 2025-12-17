@@ -1,6 +1,6 @@
 #import <Cocoa/Cocoa.h>
 #import "gui_ringbuffer.h"
-#import "gui_telemetry_bridge.h"
+#import "gui_bridge.h"
 
 @interface GuiGraphView : NSView
 - (instancetype)initWithFrame:(NSRect)frame
@@ -15,9 +15,9 @@
 - (instancetype)initWithFrame:(NSRect)frame
                        cpuBuf:(GuiRingBuffer *)cpuBuf
                        gpuBuf:(GuiRingBuffer *)gpuBuf
-                         cpu:(GuiCpuProbe *)cpuProbe
-                         intervalMillis:(NSUInteger)interval
-                    systemInfo:(GuiSystemInfo)systemInfo
-             showIdentifiers:(BOOL)showIdentifiers;
+                    telemetry:(GuiTelemetry *)telemetry
+              intervalMillis:(NSUInteger)interval
+                 systemInfo:(SnooperSystemInfo)systemInfo
+            showIdentifiers:(BOOL)showIdentifiers;
 @end
 

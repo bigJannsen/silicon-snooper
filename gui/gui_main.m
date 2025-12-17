@@ -5,7 +5,7 @@
 #import <string.h>
 #import "gui_view.h"
 #import "gui_ringbuffer.h"
-#import "gui_telemetry_bridge.h"
+#import "gui_bridge.h"
 
 static void print_gui_usage(const char *progname) {
     printf("Usage:\n");
@@ -47,9 +47,9 @@ static int parse_arguments(int argc, const char **argv, int *interval_ms, int *s
 @interface GuiAppDelegate : NSObject <NSApplicationDelegate>
 @property (nonatomic, assign) GuiRingBuffer *cpuBuffer;
 @property (nonatomic, assign) GuiRingBuffer *gpuBuffer;
-@property (nonatomic, assign) GuiCpuProbe *cpuProbe;
+@property (nonatomic, assign) GuiTelemetry *telemetry;
 @property (nonatomic, assign) NSUInteger intervalMs;
-@property (nonatomic, assign) GuiSystemInfo systemInfo;
+@property (nonatomic, assign) SnooperSystemInfo systemInfo;
 @property (nonatomic, assign) BOOL showIdentifiers;
 @property (nonatomic, strong) NSWindow *window;
 @end
@@ -71,7 +71,7 @@ static int parse_arguments(int argc, const char **argv, int *interval_ms, int *s
     GuiDashboardView *view = [[GuiDashboardView alloc] initWithFrame:NSMakeRect(0, 0, frame.size.width, frame.size.height)
                                                                cpuBuf:self.cpuBuffer
                                                                gpuBuf:self.gpuBuffer
-                                                                 cpu:self.cpuProbe
+                                                            telemetry:self.telemetry
                                                       intervalMillis:self.intervalMs
                                                          systemInfo:self.systemInfo
                                                     showIdentifiers:self.showIdentifiers];
@@ -108,28 +108,25 @@ int main(int argc, const char * argv[]) {
             return 1;
         }
 
-        GuiCpuProbe cpuProbe;
-        if (gui_cpu_probe_init(&cpuProbe) != 0) {
-            fprintf(stderr, "Failed to initialize CPU probe.\n");
+        GuiTelemetry telemetry;
+        if (gui_telemetry_init(&telemetry, show_identifiers) != 0) {
+            fprintf(stderr, "Failed to initialize telemetry.\n");
             gui_ring_buffer_destroy(&cpuBuffer);
             gui_ring_buffer_destroy(&gpuBuffer);
             return 1;
         }
 
-        GuiSystemInfo sysInfo;
-        if (gui_get_system_info(&sysInfo, show_identifiers) != 0) {
-            fprintf(stderr, "Failed to read system info.\n");
-            gui_cpu_probe_destroy(&cpuProbe);
-            gui_ring_buffer_destroy(&cpuBuffer);
-            gui_ring_buffer_destroy(&gpuBuffer);
-            return 1;
+        SnooperSystemInfo sysInfo = {0};
+        const SnooperSystemInfo *info_ptr = gui_system_info(&telemetry);
+        if (info_ptr) {
+            sysInfo = *info_ptr;
         }
 
         NSApplication *app = [NSApplication sharedApplication];
         GuiAppDelegate *delegate = [[GuiAppDelegate alloc] init];
         delegate.cpuBuffer = &cpuBuffer;
         delegate.gpuBuffer = &gpuBuffer;
-        delegate.cpuProbe = &cpuProbe;
+        delegate.telemetry = &telemetry;
         delegate.intervalMs = (NSUInteger)interval_ms;
         delegate.systemInfo = sysInfo;
         delegate.showIdentifiers = show_identifiers ? YES : NO;
@@ -137,7 +134,7 @@ int main(int argc, const char * argv[]) {
         [app setActivationPolicy:NSApplicationActivationPolicyRegular];
         [app run];
 
-        gui_cpu_probe_destroy(&cpuProbe);
+        gui_telemetry_destroy(&telemetry);
         gui_ring_buffer_destroy(&cpuBuffer);
         gui_ring_buffer_destroy(&gpuBuffer);
     }
