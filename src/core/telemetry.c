@@ -64,5 +64,7 @@ SnooperStatus snooper_snapshot_collect(SnooperTelemetry *telemetry, SnooperSnaps
         out->has_system_info = 1;
     }
 
+    (void)snooper_system_metrics_read(&out->system_metrics);
+
     return SNOOPER_OK;
 }

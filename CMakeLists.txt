@@ -10,6 +10,7 @@ set(CORE_SOURCES
         src/core/cpu.c
         src/core/gpu.c
         src/core/system_info.c
+        src/core/system_metrics.c
         src/core/telemetry.c
         src/core/timeutil.c)
 
@@ -39,4 +40,3 @@ target_link_libraries(silicon_snooper_gui
         "-framework Cocoa"
         "-framework CoreFoundation"
         "-framework IOKit")
-

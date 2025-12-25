@@ -9,6 +9,7 @@
 
 @property (nonatomic, assign) double latestValue;
 @property (nonatomic, assign) BOOL metricAvailable;
+@property (nonatomic, copy) NSString *unavailableLabel;
 @end
 
 @interface GuiDashboardView : NSView
@@ -20,4 +21,3 @@
                  systemInfo:(SnooperSystemInfo)systemInfo
             showIdentifiers:(BOOL)showIdentifiers;
 @end
-

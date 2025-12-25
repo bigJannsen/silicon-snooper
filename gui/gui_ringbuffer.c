@@ -56,3 +56,12 @@ size_t gui_ring_buffer_copy(const GuiRingBuffer *buffer, double *out_values, siz
 
     return to_copy;
 }
+
+void gui_ring_buffer_clear(GuiRingBuffer *buffer) {
+    if (!buffer || !buffer->values) {
+        return;
+    }
+    buffer->count = 0;
+    buffer->head = 0;
+    memset(buffer->values, 0, sizeof(double) * buffer->capacity);
+}
