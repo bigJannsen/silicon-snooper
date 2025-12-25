@@ -6,6 +6,7 @@
 #include "snooper/cpu.h"
 #include "snooper/gpu.h"
 #include "snooper/system_info.h"
+#include "snooper/system_metrics.h"
 
 typedef struct {
     uint64_t monotonic_ns;
@@ -15,6 +16,7 @@ typedef struct {
     int gpu_available;
     SnooperSystemInfo system_info;
     int has_system_info;
+    SnooperSystemMetrics system_metrics;
 } SnooperSnapshot;
 
 typedef struct {

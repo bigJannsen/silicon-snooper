@@ -58,7 +58,7 @@ static int parse_arguments(int argc, const char **argv, int *interval_ms, int *s
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
     (void)notification;
-    NSRect frame = NSMakeRect(0, 0, 900, 520);
+    NSRect frame = NSMakeRect(0, 0, 1000, 650);
     self.window = [[NSWindow alloc] initWithContentRect:frame
                                               styleMask:(NSWindowStyleMaskTitled |
                                                          NSWindowStyleMaskClosable |
@@ -101,32 +101,45 @@ int main(int argc, const char * argv[]) {
             capacity = 2;
         }
 
-        GuiRingBuffer cpuBuffer;
-        GuiRingBuffer gpuBuffer;
-        if (gui_ring_buffer_init(&cpuBuffer, capacity) != 0 || gui_ring_buffer_init(&gpuBuffer, capacity) != 0) {
+        GuiRingBuffer *cpuBuffer = (GuiRingBuffer *)calloc(1, sizeof(GuiRingBuffer));
+        GuiRingBuffer *gpuBuffer = (GuiRingBuffer *)calloc(1, sizeof(GuiRingBuffer));
+        if (!cpuBuffer || !gpuBuffer ||
+            gui_ring_buffer_init(cpuBuffer, capacity) != 0 ||
+            gui_ring_buffer_init(gpuBuffer, capacity) != 0) {
             fprintf(stderr, "Failed to allocate ring buffers.\n");
+            if (cpuBuffer) {
+                gui_ring_buffer_destroy(cpuBuffer);
+                free(cpuBuffer);
+            }
+            if (gpuBuffer) {
+                gui_ring_buffer_destroy(gpuBuffer);
+                free(gpuBuffer);
+            }
             return 1;
         }
 
-        GuiTelemetry telemetry;
-        if (gui_telemetry_init(&telemetry, show_identifiers) != 0) {
+        GuiTelemetry *telemetry = (GuiTelemetry *)calloc(1, sizeof(GuiTelemetry));
+        if (!telemetry || gui_telemetry_init(telemetry, show_identifiers) != 0) {
             fprintf(stderr, "Failed to initialize telemetry.\n");
-            gui_ring_buffer_destroy(&cpuBuffer);
-            gui_ring_buffer_destroy(&gpuBuffer);
+            gui_ring_buffer_destroy(cpuBuffer);
+            gui_ring_buffer_destroy(gpuBuffer);
+            free(cpuBuffer);
+            free(gpuBuffer);
+            free(telemetry);
             return 1;
         }
 
         SnooperSystemInfo sysInfo = {0};
-        const SnooperSystemInfo *info_ptr = gui_system_info(&telemetry);
+        const SnooperSystemInfo *info_ptr = gui_system_info(telemetry);
         if (info_ptr) {
             sysInfo = *info_ptr;
         }
 
         NSApplication *app = [NSApplication sharedApplication];
         GuiAppDelegate *delegate = [[GuiAppDelegate alloc] init];
-        delegate.cpuBuffer = &cpuBuffer;
-        delegate.gpuBuffer = &gpuBuffer;
-        delegate.telemetry = &telemetry;
+        delegate.cpuBuffer = cpuBuffer;
+        delegate.gpuBuffer = gpuBuffer;
+        delegate.telemetry = telemetry;
         delegate.intervalMs = (NSUInteger)interval_ms;
         delegate.systemInfo = sysInfo;
         delegate.showIdentifiers = show_identifiers ? YES : NO;
@@ -134,9 +147,12 @@ int main(int argc, const char * argv[]) {
         [app setActivationPolicy:NSApplicationActivationPolicyRegular];
         [app run];
 
-        gui_telemetry_destroy(&telemetry);
-        gui_ring_buffer_destroy(&cpuBuffer);
-        gui_ring_buffer_destroy(&gpuBuffer);
+        gui_telemetry_destroy(telemetry);
+        gui_ring_buffer_destroy(cpuBuffer);
+        gui_ring_buffer_destroy(gpuBuffer);
+        free(telemetry);
+        free(cpuBuffer);
+        free(gpuBuffer);
     }
     return 0;
 }

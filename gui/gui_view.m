@@ -1,6 +1,36 @@
 #import "gui_view.h"
 #import "gui_bridge.h"
 
+static NSString *gui_format_bytes(uint64_t bytes) {
+    static const double kUnit = 1024.0;
+    double value = (double)bytes;
+    const char *units[] = {"B", "KB", "MB", "GB", "TB"};
+    int unit_index = 0;
+    while (value >= kUnit && unit_index < 4) {
+        value /= kUnit;
+        unit_index++;
+    }
+    return [NSString stringWithFormat:@"%.2f %s", value, units[unit_index]];
+}
+
+static NSString *gui_format_uptime(uint64_t seconds) {
+    uint64_t days = seconds / 86400;
+    uint64_t hours = (seconds % 86400) / 3600;
+    uint64_t minutes = (seconds % 3600) / 60;
+    uint64_t secs = seconds % 60;
+    if (days > 0) {
+        return [NSString stringWithFormat:@"%llud %lluh %llum %llus",
+                                          (unsigned long long)days,
+                                          (unsigned long long)hours,
+                                          (unsigned long long)minutes,
+                                          (unsigned long long)secs];
+    }
+    return [NSString stringWithFormat:@"%lluh %llum %llus",
+                                      (unsigned long long)hours,
+                                      (unsigned long long)minutes,
+                                      (unsigned long long)secs];
+}
+
 @interface GuiGraphView ()
 @property (nonatomic, assign) GuiRingBuffer *buffer;
 @property (nonatomic, copy) NSString *title;
@@ -17,6 +47,7 @@
         _title = [title copy];
         _metricAvailable = YES;
         _latestValue = 0.0;
+        _unavailableLabel = nil;
     }
     return self;
 }
@@ -52,16 +83,26 @@
                                         graphRect.origin.y - 14)
              withAttributes:labelAttrs];
 
+    NSDictionary *axisAttrs = @{ NSForegroundColorAttributeName: [NSColor colorWithCalibratedWhite:0.65 alpha:1.0],
+                                 NSFontAttributeName: [NSFont systemFontOfSize:10 weight:NSFontWeightRegular] };
+    [@"100" drawAtPoint:NSMakePoint(graphRect.origin.x + 4, graphRect.origin.y + 2)
+          withAttributes:axisAttrs];
+    [@"0" drawAtPoint:NSMakePoint(graphRect.origin.x + 4,
+                                  graphRect.origin.y + graphRect.size.height - 12)
+        withAttributes:axisAttrs];
+
+    if (!self.metricAvailable) {
+        NSDictionary *unavailAttrs = @{ NSForegroundColorAttributeName: [NSColor colorWithCalibratedRed:0.9 green:0.6 blue:0.4 alpha:1.0],
+                                         NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold] };
+        NSString *msg = self.unavailableLabel ?: @"Unavailable";
+        NSSize size = [msg sizeWithAttributes:unavailAttrs];
+        CGFloat x = graphRect.origin.x + (graphRect.size.width - size.width) / 2.0;
+        CGFloat y = graphRect.origin.y + (graphRect.size.height - size.height) / 2.0;
+        [msg drawAtPoint:NSMakePoint(x, y) withAttributes:unavailAttrs];
+        return;
+    }
+
     if (!_buffer || _buffer->count == 0 || !_buffer->values) {
-        if (!self.metricAvailable) {
-            NSDictionary *unavailAttrs = @{ NSForegroundColorAttributeName: [NSColor colorWithCalibratedRed:0.9 green:0.6 blue:0.4 alpha:1.0],
-                                             NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold] };
-            NSString *msg = @"Unavailable";
-            NSSize size = [msg sizeWithAttributes:unavailAttrs];
-            CGFloat x = graphRect.origin.x + (graphRect.size.width - size.width) / 2.0;
-            CGFloat y = graphRect.origin.y + (graphRect.size.height - size.height) / 2.0;
-            [msg drawAtPoint:NSMakePoint(x, y) withAttributes:unavailAttrs];
-        }
         return;
     }
 
@@ -92,21 +133,10 @@
         }
     }
 
-    NSColor *stroke = self.metricAvailable ? [NSColor colorWithCalibratedRed:0.2 green:0.7 blue:1.0 alpha:1.0]
-                                           : [NSColor colorWithCalibratedWhite:0.5 alpha:0.6];
+    NSColor *stroke = [NSColor colorWithCalibratedRed:0.2 green:0.7 blue:1.0 alpha:1.0];
     [stroke setStroke];
     [path setLineWidth:2.0];
     [path stroke];
-
-    if (!self.metricAvailable) {
-        NSDictionary *unavailAttrs = @{ NSForegroundColorAttributeName: [NSColor colorWithCalibratedRed:0.9 green:0.6 blue:0.4 alpha:1.0],
-                                         NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold] };
-        NSString *msg = @"Unavailable";
-        NSSize size = [msg sizeWithAttributes:unavailAttrs];
-        CGFloat x = graphRect.origin.x + (graphRect.size.width - size.width) / 2.0;
-        CGFloat y = graphRect.origin.y + (graphRect.size.height - size.height) / 2.0;
-        [msg drawAtPoint:NSMakePoint(x, y) withAttributes:unavailAttrs];
-    }
 
     free(values);
 }
@@ -123,6 +153,7 @@
 @property (nonatomic, assign) NSUInteger intervalMillis;
 @property (nonatomic, assign) SnooperSystemInfo systemInfo;
 @property (nonatomic, assign) BOOL showIdentifiers;
+@property (nonatomic, assign) SnooperSystemMetrics latestMetrics;
 @end
 
 @implementation GuiDashboardView
@@ -145,6 +176,7 @@
 
         _cpuView = [[GuiGraphView alloc] initWithFrame:NSZeroRect title:@"CPU Usage (%)" buffer:_cpuBuffer];
         _gpuView = [[GuiGraphView alloc] initWithFrame:NSZeroRect title:@"GPU Usage (%)" buffer:_gpuBuffer];
+        _gpuView.unavailableLabel = @"GPU Usage: N/A";
         [self addSubview:_cpuView];
         [self addSubview:_gpuView];
 
@@ -164,9 +196,10 @@
 - (void)layout {
     [super layout];
     CGFloat padding = 16.0;
-    CGFloat infoHeight = 140.0;
+    CGFloat infoHeight = 170.0;
+    CGFloat activityHeight = 140.0;
     CGFloat graphAreaY = padding + infoHeight;
-    CGFloat availableHeight = self.bounds.size.height - graphAreaY - padding;
+    CGFloat availableHeight = self.bounds.size.height - graphAreaY - activityHeight - padding;
     CGFloat graphWidth = (self.bounds.size.width - padding * 3) / 2.0;
 
     self.cpuView.frame = NSMakeRect(padding,
@@ -209,8 +242,11 @@
                 self.gpuView.latestValue = gpu_val;
                 self.gpuView.metricAvailable = YES;
             } else {
+                gui_ring_buffer_clear(_gpuBuffer);
                 self.gpuView.metricAvailable = NO;
             }
+
+            self.latestMetrics = snapshot.system_metrics;
         }
     }
 
@@ -226,7 +262,8 @@
     NSRectFill(self.bounds);
 
     CGFloat padding = 16.0;
-    CGFloat infoHeight = 140.0;
+    CGFloat infoHeight = 170.0;
+    CGFloat activityHeight = 140.0;
     NSRect infoRect = NSMakeRect(padding, padding, self.bounds.size.width - padding * 2, infoHeight);
 
     NSBezierPath *panel = [NSBezierPath bezierPathWithRoundedRect:infoRect xRadius:8 yRadius:8];
@@ -250,11 +287,11 @@
         [NSString stringWithFormat:@"CPU Model        : %s", _systemInfo.cpu_model],
         [NSString stringWithFormat:@"Architecture     : %s", _systemInfo.cpu_architecture],
         [NSString stringWithFormat:@"Cores (phys/log) : %d / %d", _systemInfo.physical_cores, _systemInfo.logical_cores],
-        [NSString stringWithFormat:@"Board ID         : %s", _systemInfo.board_id]
+        [NSString stringWithFormat:@"Board ID         : %s", _systemInfo.board_id],
+        [NSString stringWithFormat:@"Product Name     : %s", _systemInfo.product_name]
     ];
 
     NSArray<NSString *> *rightLines = @[
-        [NSString stringWithFormat:@"Product Name     : %s", _systemInfo.product_name],
         [NSString stringWithFormat:@"Serial Number    : %s", _systemInfo.serial_number],
         [NSString stringWithFormat:@"Hardware UUID    : %s", _systemInfo.hardware_uuid],
         _showIdentifiers ? @"Identifiers shown" : @"Identifiers masked"
@@ -268,6 +305,53 @@
     for (NSUInteger i = 0; i < [rightLines count]; ++i) {
         CGFloat y = startY + lineHeight * i;
         [rightLines[i] drawAtPoint:NSMakePoint(col2X, y) withAttributes:labelAttrs];
+    }
+
+    CGFloat activityY = self.bounds.size.height - activityHeight - padding;
+    NSRect activityRect = NSMakeRect(padding, activityY, self.bounds.size.width - padding * 2, activityHeight);
+    NSBezierPath *activityPanel = [NSBezierPath bezierPathWithRoundedRect:activityRect xRadius:8 yRadius:8];
+    [[NSColor colorWithCalibratedWhite:0.12 alpha:1.0] setFill];
+    [activityPanel fill];
+
+    [@"System Activity" drawAtPoint:NSMakePoint(activityRect.origin.x + 10, activityRect.origin.y + 10)
+                      withAttributes:titleAttrs];
+
+    SnooperSystemMetrics metrics = self.latestMetrics;
+
+    NSString *memoryLine = @"Memory           : N/A";
+    if (metrics.has_memory) {
+        NSString *used = gui_format_bytes(metrics.memory_used_bytes);
+        NSString *free = gui_format_bytes(metrics.memory_free_bytes);
+        NSString *compressed = gui_format_bytes(metrics.memory_compressed_bytes);
+        memoryLine = [NSString stringWithFormat:@"Memory           : Used %@ | Free %@ | Compressed %@",
+                                                used, free, compressed];
+    }
+
+    NSString *loadLine = @"Load Avg (1/5/15): N/A";
+    if (metrics.has_load) {
+        loadLine = [NSString stringWithFormat:@"Load Avg (1/5/15): %.2f / %.2f / %.2f",
+                                              metrics.load_avg_1, metrics.load_avg_5, metrics.load_avg_15];
+    }
+
+    NSString *uptimeLine = @"Uptime           : N/A";
+    if (metrics.has_uptime) {
+        uptimeLine = [NSString stringWithFormat:@"Uptime           : %@",
+                                               gui_format_uptime(metrics.uptime_seconds)];
+    }
+
+    NSString *procLine = @"Processes        : N/A";
+    if (metrics.has_process_info && metrics.process_count >= 0) {
+        procLine = [NSString stringWithFormat:@"Processes        : %d", metrics.process_count];
+    }
+
+    NSString *threadLine = @"Threads          : N/A";
+
+    NSArray<NSString *> *activityLines = @[memoryLine, loadLine, uptimeLine, procLine, threadLine];
+    CGFloat activityStartY = activityRect.origin.y + 34.0;
+    for (NSUInteger i = 0; i < [activityLines count]; ++i) {
+        CGFloat y = activityStartY + lineHeight * i;
+        [activityLines[i] drawAtPoint:NSMakePoint(activityRect.origin.x + 14.0, y)
+                        withAttributes:labelAttrs];
     }
 }
 
