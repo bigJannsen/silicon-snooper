@@ -3,6 +3,12 @@
 #import <stdio.h>
 #import <stdlib.h>
 #import <string.h>
+// GUI entrypoint for the silicon_snooper_gui target (see CMakeLists.txt).
+// To configure/build:
+//   cmake -S . -B build
+//   cmake --build build --target silicon_snooper_gui
+// To start the GUI:
+//   ./build/silicon_snooper_gui --watch 500
 #import "gui_view.h"
 #import "gui_ringbuffer.h"
 #import "gui_bridge.h"
